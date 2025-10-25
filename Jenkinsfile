@@ -2,8 +2,7 @@ pipeline {
     agent {
         docker {
             image 'node:18-bullseye'
-            // Izinkan akses Docker socket host dan gunakan root
-            args '-u root:root -v /var/run/docker.sock:/var/run/docker.sock'
+            args '-u root:root -v /usr/local/bin/docker:/usr/local/bin/docker -v /var/run/docker.sock:/var/run/docker.sock'
         }
     }
 
