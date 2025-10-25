@@ -37,11 +37,16 @@ pipeline {
             steps {
                 script {
                     echo '🐳 Membangun Docker image dari Dockerfile...'
-                    docker.build("${IMAGE_NAME}:${env.BUILD_NUMBER}")
+                    sh """
+                        echo "📂 Current directory: $(pwd)"
+                        ls -la
+                        docker build -t ${IMAGE_NAME}:${env.BUILD_NUMBER} .
+                    """
                     echo "✅ Image berhasil dibuat: ${IMAGE_NAME}:${env.BUILD_NUMBER}"
                 }
             }
         }
+
 
         stage('Push Docker Image') {
             steps {
