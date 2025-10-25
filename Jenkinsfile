@@ -1,18 +1,11 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:18-bullseye'
-            args '-u root:root -v /usr/local/bin/docker:/usr/local/bin/docker -v /var/run/docker.sock:/var/run/docker.sock'
-        }
-    }
+    agent any  // Ubah dari docker agent ke any
 
     environment {
         IMAGE_NAME = 'abdieeuh/praktikum_modul3_reactnative'
         REGISTRY = 'https://index.docker.io/v1/'
         REGISTRY_CREDENTIALS = 'dockerhub-credentials'
         CONTAINER_NAME = 'praktikum_modul3_reactnative'
-        PATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        DOCKER_HOST = "unix:///var/run/docker.sock"
     }
 
     stages {
@@ -23,12 +16,36 @@ pipeline {
             }
         }
 
-        stage('Build Node Project') {
+        stage('Check Docker') {
+            steps {
+                script {
+                    echo '🔍 Mengecek Docker installation...'
+                    sh '''
+                        echo "Docker version:"
+                        docker --version
+                        echo "Docker info:"
+                        docker info || true
+                        echo "Current user: $(whoami)"
+                        echo "Docker socket permissions:"
+                        ls -la /var/run/docker.sock
+                    '''
+                }
+            }
+        }
+
+        stage('Install Node Dependencies') {
+            agent {
+                docker {
+                    image 'node:18-bullseye'
+                    args '-u root:root'
+                    reuseNode true  // Gunakan workspace yang sama
+                }
+            }
             steps {
                 echo '🛠️ Menginstal dependencies project...'
                 sh '''
                     npm install --legacy-peer-deps
-                    echo "✅ Build Node Project selesai"
+                    echo "✅ Dependencies terinstall"
                 '''
             }
         }
@@ -39,9 +56,22 @@ pipeline {
                     echo '🐳 Membangun Docker image dari Dockerfile...'
                     sh '''
                         echo "📂 Current directory: $(pwd)"
+                        echo "📋 Files:"
                         ls -la
+                        echo "🔨 Building image..."
                     '''
-                    sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                    
+                    // Build dengan error handling
+                    sh """
+                        docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} . || {
+                            echo "❌ Docker build failed"
+                            exit 1
+                        }
+                    """
+                    
+                    // Tag sebagai latest
+                    sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
+                    
                     echo "✅ Image berhasil dibuat: ${IMAGE_NAME}:${BUILD_NUMBER}"
                 }
             }
@@ -55,6 +85,20 @@ pipeline {
                         docker.image("${IMAGE_NAME}:${BUILD_NUMBER}").push()
                         docker.image("${IMAGE_NAME}:${BUILD_NUMBER}").push('latest')
                     }
+                    echo '✅ Push berhasil!'
+                }
+            }
+        }
+
+        stage('Stop Old Container') {
+            steps {
+                script {
+                    echo '🛑 Menghentikan container lama jika ada...'
+                    sh '''
+                        docker stop ${CONTAINER_NAME} || true
+                        docker rm ${CONTAINER_NAME} || true
+                        echo "✅ Container lama dihapus"
+                    '''
                 }
             }
         }
@@ -63,16 +107,29 @@ pipeline {
             steps {
                 script {
                     echo '🚀 Deploy aplikasi dengan Docker Compose...'
-                    // Gunakan docker compose atau docker-compose sesuai environment
                     sh '''
+                        # Check docker compose command
                         if command -v docker compose &> /dev/null; then
-                            docker compose down || true
-                            docker compose up -d --build
+                            COMPOSE_CMD="docker compose"
+                        elif command -v docker-compose &> /dev/null; then
+                            COMPOSE_CMD="docker-compose"
                         else
-                            docker-compose down || true
-                            docker-compose up -d --build
+                            echo "❌ Docker Compose tidak ditemukan!"
+                            exit 1
                         fi
-                        echo "✅ Container berjalan di port 8081, 19000, dan 19006"
+                        
+                        echo "📋 Using: $COMPOSE_CMD"
+                        
+                        # Stop existing containers
+                        $COMPOSE_CMD down || true
+                        
+                        # Start new containers
+                        $COMPOSE_CMD up -d --build
+                        
+                        echo "✅ Container berjalan di:"
+                        echo "   - Metro Bundler: http://localhost:8081"
+                        echo "   - Expo DevTools: http://localhost:19000"
+                        echo "   - Web: http://localhost:19006"
                     '''
                 }
             }
@@ -80,10 +137,26 @@ pipeline {
 
         stage('Verify Container') {
             steps {
-                sh '''
-                    echo "🔍 Mengecek container yang berjalan..."
-                    docker ps | grep praktikum_modul3_reactnative || echo "⚠️ Container tidak ditemukan!"
-                '''
+                script {
+                    echo '🔍 Mengecek container yang berjalan...'
+                    sh '''
+                        sleep 5
+                        echo "📊 Container status:"
+                        docker ps -a | grep ${CONTAINER_NAME}
+                        
+                        echo ""
+                        echo "📝 Container logs (last 20 lines):"
+                        docker logs --tail 20 ${CONTAINER_NAME}
+                        
+                        # Check if container is running
+                        if docker ps | grep -q ${CONTAINER_NAME}; then
+                            echo "✅ Container berjalan dengan baik!"
+                        else
+                            echo "⚠️ Container tidak berjalan!"
+                            exit 1
+                        fi
+                    '''
+                }
             }
         }
     }
@@ -91,16 +164,43 @@ pipeline {
     post {
         success {
             echo """
-🎉 Pipeline selesai dengan sukses!
-🌐 Akses app di: http://localhost:8081
-📱 Scan QR code via Expo Go untuk testing mobile app
+╔════════════════════════════════════════════════════════╗
+║        🎉 PIPELINE BERHASIL DIJALANKAN! 🎉            ║
+╠════════════════════════════════════════════════════════╣
+║                                                        ║
+║  🌐 Akses aplikasi:                                   ║
+║     • Metro Bundler: http://localhost:8081            ║
+║     • Expo DevTools: http://localhost:19000           ║
+║     • Web Version:   http://localhost:19006           ║
+║                                                        ║
+║  📱 Mobile Testing:                                    ║
+║     1. Install Expo Go di smartphone                  ║
+║     2. Scan QR code di http://localhost:19000         ║
+║                                                        ║
+║  🐳 Docker Image: ${IMAGE_NAME}:${BUILD_NUMBER}       ║
+║                                                        ║
+╚════════════════════════════════════════════════════════╝
 """
         }
         failure {
-            echo "❌ Build gagal, silakan periksa log di Jenkins."
+            echo """
+╔════════════════════════════════════════════════════════╗
+║           ❌ BUILD GAGAL ❌                            ║
+╠════════════════════════════════════════════════════════╣
+║                                                        ║
+║  Silakan periksa:                                     ║
+║  1. Log Jenkins untuk detail error                    ║
+║  2. Docker daemon status                              ║
+║  3. Permissions untuk Docker socket                   ║
+║  4. Dockerfile syntax                                 ║
+║                                                        ║
+╚════════════════════════════════════════════════════════╝
+"""
         }
         always {
             echo '🏁 Pipeline selesai dijalankan.'
+            // Cleanup jika diperlukan
+            sh 'docker system prune -f || true'
         }
     }
 }
