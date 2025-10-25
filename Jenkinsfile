@@ -1,8 +1,8 @@
 pipeline {
     agent {
         docker {
-            image 'node:18-bullseye'    // sama seperti di Dockerfile
-            args '-u root:root'         // agar punya izin install & akses docker.sock
+            image 'node:18-bullseye'
+            args '-u root:root' // izinkan akses root
         }
     }
 
@@ -37,16 +37,17 @@ pipeline {
             steps {
                 script {
                     echo '🐳 Membangun Docker image dari Dockerfile...'
-                    sh """
+                    // gunakan triple single quotes agar Groovy tidak expand $
+                    sh '''
                         echo "📂 Current directory: $(pwd)"
                         ls -la
-                        docker build -t ${IMAGE_NAME}:${env.BUILD_NUMBER} .
-                    """
+                    '''
+                    // ekspansi variabel dilakukan di luar blok sh
+                    sh "docker build -t ${IMAGE_NAME}:${env.BUILD_NUMBER} ."
                     echo "✅ Image berhasil dibuat: ${IMAGE_NAME}:${env.BUILD_NUMBER}"
                 }
             }
         }
-
 
         stage('Push Docker Image') {
             steps {
@@ -77,7 +78,7 @@ pipeline {
             steps {
                 sh '''
                     echo "🔍 Mengecek container yang berjalan..."
-                    docker ps | grep $CONTAINER_NAME || echo "⚠️ Container tidak ditemukan!"
+                    docker ps | grep praktikum_modul3_reactnative || echo "⚠️ Container tidak ditemukan!"
                 '''
             }
         }
