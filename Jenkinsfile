@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:18-bullseye'    // sama seperti di Dockerfile
+            args '-u root:root'         // agar punya izin install & akses docker.sock
+        }
+    }
 
     environment {
         IMAGE_NAME = 'abdieeuh/praktikum_modul3_reactnative'
@@ -55,12 +60,8 @@ pipeline {
                 script {
                     echo '🚀 Deploy aplikasi dengan docker-compose...'
                     sh '''
-                        # Hentikan container lama jika ada
                         docker compose down || true
-                        
-                        # Jalankan container baru berdasarkan docker-compose.yml
                         docker compose up -d --build
-
                         echo "✅ Container berjalan di port 8081, 19000, dan 19006"
                     '''
                 }
