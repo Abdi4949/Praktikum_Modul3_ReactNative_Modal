@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker {
             image 'node:18-bullseye'
-            args '-u root:root --privileged -v /usr/local/bin/docker:/usr/local/bin/docker -v /var/run/docker.sock:/var/run/docker.sock'
+            args '-u root:root -v /usr/local/bin/docker:/usr/local/bin/docker -v /var/run/docker.sock:/var/run/docker.sock'
         }
     }
 
@@ -20,15 +20,6 @@ pipeline {
             steps {
                 echo '📦 Melakukan checkout dari SCM...'
                 checkout scm
-            }
-        }
-
-        stage('Verify Docker Access') {
-            steps {
-                sh '''
-                    echo "🔍 Mengecek akses Docker dari dalam container agent..."
-                    docker info > /dev/null 2>&1 && echo "✅ Docker dapat diakses" || (echo "❌ Docker tidak bisa diakses"; exit 1)
-                '''
             }
         }
 
@@ -72,6 +63,7 @@ pipeline {
             steps {
                 script {
                     echo '🚀 Deploy aplikasi dengan Docker Compose...'
+                    // Gunakan docker compose atau docker-compose sesuai environment
                     sh '''
                         if command -v docker compose &> /dev/null; then
                             docker compose down || true
