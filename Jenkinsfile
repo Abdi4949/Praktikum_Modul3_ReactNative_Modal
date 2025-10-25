@@ -2,7 +2,8 @@ pipeline {
     agent {
         docker {
             image 'node:18-bullseye'
-            args '-u root:root' // izinkan akses root
+            // Izinkan akses Docker socket host dan gunakan root
+            args '-u root:root -v /var/run/docker.sock:/var/run/docker.sock'
         }
     }
 
@@ -37,14 +38,12 @@ pipeline {
             steps {
                 script {
                     echo '🐳 Membangun Docker image dari Dockerfile...'
-                    // gunakan triple single quotes agar Groovy tidak expand $
                     sh '''
                         echo "📂 Current directory: $(pwd)"
                         ls -la
                     '''
-                    // ekspansi variabel dilakukan di luar blok sh
-                    sh "docker build -t ${IMAGE_NAME}:${env.BUILD_NUMBER} ."
-                    echo "✅ Image berhasil dibuat: ${IMAGE_NAME}:${env.BUILD_NUMBER}"
+                    sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                    echo "✅ Image berhasil dibuat: ${IMAGE_NAME}:${BUILD_NUMBER}"
                 }
             }
         }
@@ -54,8 +53,8 @@ pipeline {
                 script {
                     echo '📤 Push image ke Docker Hub...'
                     docker.withRegistry(REGISTRY, REGISTRY_CREDENTIALS) {
-                        docker.image("${IMAGE_NAME}:${env.BUILD_NUMBER}").push()
-                        docker.image("${IMAGE_NAME}:${env.BUILD_NUMBER}").push('latest')
+                        docker.image("${IMAGE_NAME}:${BUILD_NUMBER}").push()
+                        docker.image("${IMAGE_NAME}:${BUILD_NUMBER}").push('latest')
                     }
                 }
             }
@@ -64,10 +63,16 @@ pipeline {
         stage('Deploy with Docker Compose') {
             steps {
                 script {
-                    echo '🚀 Deploy aplikasi dengan docker-compose...'
+                    echo '🚀 Deploy aplikasi dengan Docker Compose...'
+                    // Gunakan docker compose atau docker-compose sesuai environment
                     sh '''
-                        docker compose down || true
-                        docker compose up -d --build
+                        if command -v docker compose &> /dev/null; then
+                            docker compose down || true
+                            docker compose up -d --build
+                        else
+                            docker-compose down || true
+                            docker-compose up -d --build
+                        fi
                         echo "✅ Container berjalan di port 8081, 19000, dan 19006"
                     '''
                 }
@@ -88,7 +93,7 @@ pipeline {
         success {
             echo """
 🎉 Pipeline selesai dengan sukses!
-🌐 Akses app di http://localhost:8081
+🌐 Akses app di: http://localhost:8081
 📱 Scan QR code via Expo Go untuk testing mobile app
 """
         }
