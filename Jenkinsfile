@@ -14,12 +14,17 @@ pipeline {
             }
         }
 
-        stage('Stop Old Container') {
+        stage('Cleanup') {
             steps {
-                echo '🛑 Stop container lama...'
+                echo '🧹 Cleanup...'
                 sh '''
+                    # Stop containers
                     docker compose down || true
                     docker rm -f ${CONTAINER_NAME} || true
+                    
+                    # Prune untuk clear cache
+                    docker system prune -f
+                    docker builder prune -f
                 '''
             }
         }
@@ -28,8 +33,29 @@ pipeline {
             steps {
                 echo '🚀 Build dan Deploy dengan Docker Compose...'
                 sh '''
-                    # Build dan jalankan
-                    docker compose up -d --build
+                    # Build dengan retry mechanism
+                    MAX_RETRIES=3
+                    RETRY_COUNT=0
+                    
+                    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                        echo "Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES"
+                        
+                        if docker compose up -d --build; then
+                            echo "✅ Build successful!"
+                            break
+                        else
+                            RETRY_COUNT=$((RETRY_COUNT + 1))
+                            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                                echo "⚠️ Build failed, cleaning and retrying..."
+                                docker compose down
+                                docker system prune -f
+                                sleep 5
+                            else
+                                echo "❌ Build failed after $MAX_RETRIES attempts"
+                                exit 1
+                            fi
+                        fi
+                    done
                     
                     # Tunggu container siap
                     sleep 10
