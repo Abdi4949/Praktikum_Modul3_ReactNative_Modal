@@ -23,6 +23,15 @@ pipeline {
             }
         }
 
+        stage('Verify Docker Access') {
+            steps {
+                sh '''
+                    echo "🔍 Mengecek akses Docker dari dalam container agent..."
+                    docker info > /dev/null 2>&1 && echo "✅ Docker dapat diakses" || (echo "❌ Docker tidak bisa diakses"; exit 1)
+                '''
+            }
+        }
+
         stage('Build Node Project') {
             steps {
                 echo '🛠️ Menginstal dependencies project...'
@@ -63,7 +72,6 @@ pipeline {
             steps {
                 script {
                     echo '🚀 Deploy aplikasi dengan Docker Compose...'
-                    // Gunakan docker compose atau docker-compose sesuai environment
                     sh '''
                         if command -v docker compose &> /dev/null; then
                             docker compose down || true
